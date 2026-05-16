@@ -1,402 +1,733 @@
-# NLPGON
+# Milestone 3: Arabic RAG
 
-1. Dataset Structure
+## Features
 
-The dataset is organized into two main folders:
+- Arabic transcript retrieval
+- Multilingual embeddings
+- FAISS vector store
+- Strict grounded prompting
+- Multi-turn memory
+- Out-of-domain detection
+- Retry and fallback model strategy
+- Streamlit interface
+- Evaluation logs
+- Two-LLM comparison
 
-Transcript folder
-Contains raw transcript files for each episode. Each file corresponds to a single video and contains text segments representing spoken dialogue or subtitle-like utterances.
+## 2. Main Features
 
-QA folder
-Contains CSV files storing question–answer pairs derived from the episode content.
+### Arabic Transcript Retrieval
 
-For this project:
+The system retrieves relevant Arabic transcript chunks based on the user question.
 
-each transcript file represents one episode
+Implemented in:
 
-each QA file contains multiple question–answer pairs associated with that episode
+```text
+rag_pipeline.py
+```
 
-transcript data is used for linguistic exploration and preprocessing
+Main function:
 
-QA data is used for preparing supervised datasets for modeling
+```python
+retrieve_context()
+```
 
-This structure allows us to analyze both:
+The retriever searches the FAISS vector store and returns the top relevant transcript chunks with their metadata.
 
-the linguistic characteristics of the transcript corpus
+---
 
-the supervised QA task built on top of the transcripts
+### Multilingual Embeddings
 
-2. Dataset Statistics
+The project uses a multilingual embedding model to represent Arabic, English, and mixed Arabic-English text.
 
-The dataset contains multiple transcript files and corresponding QA files. After loading and processing:
+Embedding model:
 
-transcripts are split into segments
+```text
+intfloat/multilingual-e5-small
+```
 
-tokens are extracted from each segment
+Implemented in:
 
-linguistic statistics are computed per episode
+```text
+build_vectorstore.py
+rag_pipeline.py
+```
 
-Key statistics reported include:
+The embedding model converts transcript chunks and user queries into numerical vectors.
 
-number of transcripts
+---
 
-number of segments
+### FAISS Vector Store
 
-token counts per episode
+FAISS is used as the local vector database.
 
-average segment length
+It stores transcript embeddings and retrieves the closest chunks to the user query.
 
-vocabulary size
+Implemented in:
 
-type–token ratio (TTR)
+```text
+build_vectorstore.py
+rag_pipeline.py
+```
 
-code-switching rates
+Build FAISS index:
 
-dialect token frequencies
+```python
+FAISS.from_documents()
+```
 
-These statistics provide an overview of the dataset scale and variability.
+Load FAISS index:
 
-Dataset Statistics Summary
+```python
+FAISS.load_local()
+```
 
-The dataset contains transcript files and QA files representing the episodes of ElDa7ee7 Season 8.
+---
 
-Initial descriptive statistics show that:
+### Strict Grounded Prompting
 
-transcript lengths vary significantly across episodes
+The chatbot is instructed to answer only from the retrieved transcript context.
 
-segment lengths are unevenly distributed
+Implemented in:
 
-the corpus contains both Arabic and English tokens
+```text
+rag_pipeline.py
+```
 
-dialectal Egyptian Arabic and code-switching are present
+Main prompt variable:
 
-lexical diversity varies across episodes as shown by vocabulary size and TTR
+```python
+STRICT_SYSTEM_PROMPT
+```
 
-These findings motivate deeper text exploration and normalization before modeling.
+The prompt prevents the model from guessing or using outside knowledge.
 
-3. Linguistic Characteristics of the Corpus
+If the answer is not found in the context, the chatbot returns:
 
-The corpus shows a mixture of:
+```text
+لا توجد معلومات كافية في السياق للإجابة على هذا السؤال.
+```
 
-Modern Standard Arabic (MSA)
+---
 
-Egyptian Arabic dialect
+### Multi-Turn Memory
 
-English code-switching
+The chatbot supports follow-up questions.
 
-Key observations include:
+Example:
 
-most explanatory content is written in Arabic
+```text
+User: من هو جون كينيدي؟
+User: وماذا حدث له؟
+```
 
-dialectal Egyptian forms appear in conversational expressions
+The system tracks:
 
-English words occur in technical or pop-science contexts
+```text
+active_episode
+active_entity
+chat_memory
+```
 
-code-switching is present but not dominant
+Implemented in:
 
-orthographic variation reflects informal transcription
+```text
+rag_pipeline.py
+```
 
-These characteristics make the dataset linguistically rich but also introduce lexical variation that requires normalization.
+Main functions:
 
-4. Exploratory Data Analysis (EDA)
+```python
+add_to_memory()
+get_sliding_window_memory()
+rewrite_followup_query()
+```
 
-Exploratory analysis investigates structural and linguistic properties of the corpus.
+The system uses sliding-window memory, meaning it keeps only the most recent conversation turns.
 
-Analyses include:
+---
 
-token frequency distribution
+### Out-of-Domain Detection
 
-vocabulary size per episode
+The system detects questions that are not supported by the selected transcripts.
 
-segment length distribution
+Example:
 
-question length distribution
+```text
+ما هو سعر الدولار اليوم؟
+```
 
-answer length distribution
+The system rejects this because it requires external/current knowledge.
 
-speech pace patterns
+Implemented in:
 
-punctuation patterns
+```text
+rag_pipeline.py
+```
 
-named entity frequency
+Main functions:
 
-rhetorical patterns
+```python
+is_obvious_external_question()
+is_out_of_domain()
+```
 
-code-switching frequency
+The rejection message is:
 
-Visualizations such as histograms and frequency plots help reveal structural patterns in the dataset.
+```text
+لا توجد معلومات كافية في الحلقات المختارة للإجابة على هذا السؤال.
+```
 
-EDA Findings Summary
+---
 
-The exploratory analysis reveals several important patterns:
+### Retry and Fallback Model Strategy
 
-token and segment distributions vary across episodes
+The system includes retry logic and a fallback model to avoid crashing if the main model fails.
 
-question and answer lengths are highly variable
+Implemented in:
 
-vocabulary diversity is influenced by dialect and orthographic variation
+```text
+rag_pipeline.py
+```
 
-conversational rhetorical phrases are common
+Primary model:
 
-named entities and English words reflect the educational content of the show
+```text
+llama-3.1-8b-instant
+```
 
-These findings confirm that the dataset is suitable for NLP modeling but requires normalization and vocabulary control.
+Fallback model:
 
-Question and Answer Length Analysis
+```text
+llama-3.3-70b-versatile
+```
 
-The QA pairs vary in length:
+Main functions:
 
-some questions are short and direct
+```python
+call_llm_with_retry()
+load_llm()
+```
 
-others require longer explanatory answers
+---
 
-This variation affects modeling decisions because:
+### Streamlit Interface
 
-sequence lengths influence padding and batching
+The project includes a Streamlit web interface for chatting with the RAG system.
 
-long answers may require truncation
+Implemented in:
 
-length variability affects model memory requirements
+```text
+app.py
+```
 
-Understanding these distributions helps design preprocessing pipelines for neural architectures.
+Run with:
 
-5. Noise Detection and Data Quality
+```bash
+streamlit run app.py
+```
 
-The raw transcripts contain several noise sources including:
+The interface shows:
 
-timestamps
+- Chat history
+- Generated answer
+- Retrieved sources
+- Chunk content
+- Retrieval query
+- Out-of-domain flag
+- Model used
+- Logs
 
-repeated punctuation
+---
 
-special symbols
+### Evaluation Logs
 
-English insertions
+The system evaluates generated answers against QA pairs.
 
-dialectal tokens
+Implemented in:
 
-orthographic variation
+```text
+evaluate.py
+```
 
-Noise statistics are computed and examples are shown to illustrate these issues.
+Evaluation output:
 
-Why Noise Cleaning Is Necessary
+```text
+logs/evaluation_logs.csv
+```
 
-Noise directly affects NLP modeling.
+Metrics used:
 
-Key impacts include:
+- Semantic similarity
+- ROUGE-L
+- Groundedness
 
-timestamps and formatting artifacts introduce meaningless tokens
+---
 
-repeated punctuation inflates vocabulary size
+### Two-LLM Comparison
 
-orthographic inconsistencies split identical words into different tokens
+The project compares two LLMs on the same QA questions.
 
-dialectal and foreign tokens increase sparsity
+Implemented in:
 
-unclean text weakens token frequency distributions
+```text
+compare_llms.py
+```
 
-Cleaning and normalization improve vocabulary consistency and model robustness.
+Compared models:
 
-Orthographic Inconsistencies
+```text
+llama-3.1-8b-instant
+llama-3.3-70b-versatile
+```
 
-Multiple spelling variants of the same word appear in the corpus.
+Output file:
 
-Examples include:
+```text
+logs/llm_comparison_logs.csv
+```
 
-Alef variants
+---
 
-Ta Marbuta vs Ha
+## 3. Project Structure
 
-Alef Maqsura vs Ya
+```text
+Milestone3/
+│
+├── app.py
+├── build_vectorstore.py
+├── rag_pipeline.py
+├── evaluate.py
+├── compare_llms.py
+├── summarize_results.py
+├── requirements.txt
+├── technical_report.md
+├── README.md
+├── .gitignore
+│
+├── data/
+│   ├── transcripts/
+│   │   ├── episode_1.txt
+│   │   ├── episode_2.txt
+│   │   └── ...
+│   │
+│   └── qa/
+│       ├── episode_1.csv
+│       ├── episode_2.csv
+│       └── ...
+│
+├── vectorstore/
+│   └── faiss_index/
+│       ├── index.faiss
+│       └── index.pkl
+│
+└── logs/
+    ├── evaluation_logs.csv
+    ├── llm_comparison_logs.csv
+    ├── evaluation_summary.csv
+    ├── llm_comparison_summary.csv
+    ├── best_cases.csv
+    └── worst_cases.csv
+```
 
-inconsistent diacritics
+---
 
-These inconsistencies increase vocabulary size unnecessarily and reduce token frequency reliability.
+## 4. Dataset Setup
 
-Detecting and correcting spelling variation helps produce a more stable lexical representation.
+Place selected transcript files inside:
 
-6. Arabic Text Normalization
+```text
+data/transcripts/
+```
 
-Normalization reduces surface variation and prepares the text for tokenization.
+Place matching QA files inside:
 
-The normalization pipeline performs:
+```text
+data/qa/
+```
 
-removal of timestamps
+Only 3 to 5 episodes should be used, according to the milestone requirements.
 
-removal of special symbols
+Example:
 
-removal of repeated punctuation
+```text
+data/transcripts/جون كينيدي  الدحيح.txt
+data/transcripts/الأخطبوط  الدحيح.txt
+data/transcripts/الساموراي  الدحيح.txt
+```
 
-removal of diacritics
+Example QA files:
 
-normalization of Alef forms
+```text
+data/qa/جون كينيدي  الدحيح.csv
+data/qa/الأخطبوط  الدحيح.csv
+data/qa/الساموراي  الدحيح.csv
+```
 
-normalization of Ta Marbuta
+---
 
-normalization of Alef Maqsura
+## 5. Environment Setup
 
-Before/after examples demonstrate the effect of normalization.
+Create a clean Conda environment:
 
-Impact of Normalization
+```bash
+conda create -n ms3rag python=3.11 -y
+conda activate ms3rag
+```
 
-Normalization improves the dataset in several ways:
+Install dependencies:
 
-reduces vocabulary fragmentation
+```bash
+pip install -r requirements.txt
+```
 
-merges equivalent orthographic forms
+---
 
-improves frequency estimation
+## 6. Requirements
 
-lowers token sparsity
+Example `requirements.txt`:
 
-produces cleaner input for tokenization
+```text
+numpy==1.26.4
+pandas
+scikit-learn
+requests
+python-dotenv
+streamlit
+rouge-score
+langchain-core
+langchain-community
+langchain-text-splitters
+langchain-huggingface
+langchain-groq
+sentence-transformers
+faiss-cpu
+```
 
-This step significantly improves data quality before modeling.
+---
 
-7. Tokenization Approach
+## 7. API Key Setup
 
-For MS1, we use simple whitespace-based tokenization.
+Create a `.env` file in the project root:
 
-This approach:
+```bash
+nano .env
+```
 
-splits text segments into tokens using spaces
+Add your Groq API key:
 
-provides a straightforward word-level representation
+```env
+GROQ_API_KEY=your_groq_api_key_here
+```
 
-enables vocabulary and frequency analysis
+Do not upload `.env` to GitHub.
 
-Advantages:
+Make sure `.env` is included in `.gitignore`.
 
-easy to implement
+---
 
-interpretable baseline
+## 8. Build the Vector Store
 
-sufficient for EDA and initial preprocessing
+Run:
 
-Limitations:
+```bash
+python build_vectorstore.py
+```
 
-Arabic morphology is complex
+This script:
 
-clitics are not segmented
+1. Loads transcript files
+2. Cleans text lightly
+3. Splits text into chunks
+4. Creates multilingual embeddings
+5. Stores embeddings in FAISS
+6. Saves the FAISS index locally
 
-dialect spelling increases token sparsity
+Expected output:
 
-More advanced tokenization strategies can be explored in later milestones.
+```text
+Loading transcripts...
+Loaded X transcript files.
+Cleaning and chunking transcripts...
+Created X chunks.
+Building FAISS vectorstore...
+Vectorstore saved to: vectorstore/faiss_index
+```
 
-8. Vocabulary Construction
+---
 
-A vocabulary is built from tokenized text.
+## 9. Run Terminal Chatbot
 
-Steps include:
+Run:
 
-counting token frequencies
+```bash
+python rag_pipeline.py
+```
 
-filtering tokens using a minimum frequency threshold
+Example questions:
 
-assigning integer indices to tokens
+```text
+من هو جون كينيدي؟
+```
 
-introducing special tokens
+```text
+وماذا حدث له؟
+```
 
-Special tokens include:
+```text
+ما هو سعر الدولار اليوم؟
+```
 
-<PAD>
+To stop the chatbot:
 
-<UNK>
+```text
+exit
+```
 
-<BOS>
+---
 
-<EOS>
+## 10. Run Streamlit App
 
-These tokens allow sequences to be padded, unknown words to be handled, and sequences to be structured for modeling.
+Run:
 
-Handling Rare and Unknown Tokens
+```bash
+streamlit run app.py
+```
 
-Rare tokens are filtered using a minimum frequency threshold.
+The app provides a web interface for the chatbot.
 
-Tokens that appear less than the threshold are mapped to the <UNK> token.
+It displays:
 
-Benefits:
+- User question
+- Generated answer
+- Retrieved transcript chunks
+- Episode source
+- Chunk ID
+- Similarity score
+- Out-of-domain result
+- Model used
+- Conversation logs
 
-controls vocabulary size
+---
 
-reduces sparsity
+## 11. Run Evaluation
 
-improves training stability
+Run:
 
-allows the model to handle unseen words
+```bash
+python evaluate.py
+```
 
-This is a common baseline approach in NLP pipelines.
+This evaluates the system using QA files from:
 
-9. Data Preparation for Neural Modeling
+```text
+data/qa/
+```
 
-After cleaning and tokenization, the text is converted into a model-ready representation.
+The output is saved to:
 
-Preparation steps include:
+```text
+logs/evaluation_logs.csv
+```
 
-tokenization
+The evaluation uses:
 
-vocabulary indexing
+### Semantic Similarity
 
-sequence encoding
+Measures meaning similarity between the generated answer and the reference answer.
 
-sequence padding
+### ROUGE-L
 
-train/validation/test splitting
+Measures text overlap between generated answer and gold answer.
 
-These steps convert raw text into fixed-length numerical sequences suitable for neural models.
+### Groundedness
 
-Corpus Summary
+Measures whether the generated answer is supported by the retrieved transcript context.
 
-The ElDa7ee7 Season 8 dataset is a linguistically rich Arabic corpus containing transcripts and QA annotations.
+---
 
-The preprocessing pipeline now:
+## 12. Compare Two LLMs
 
-characterizes dataset structure and statistics
+Run:
 
-explores linguistic patterns
+```bash
+python compare_llms.py
+```
 
-detects noise sources
+This compares:
 
-normalizes Arabic text
+```text
+llama-3.1-8b-instant
+llama-3.3-70b-versatile
+```
 
-builds vocabulary representations
+The output is saved to:
 
-prepares indexed sequences for modeling
+```text
+logs/llm_comparison_logs.csv
+```
 
-This completes the MS1 foundation required for later modeling stages.
+The comparison uses:
 
-Limitations and Future Work
+- Semantic similarity
+- ROUGE-L
+- Groundedness
 
-Despite the completed preprocessing pipeline, several limitations remain.
+---
 
-Current limitations include:
+## 13. Summarize Results
 
-word-level tokenization does not capture Arabic morphology
+Run:
 
-dialect normalization remains partial
+```bash
+python summarize_results.py
+```
 
-English tokens were removed in normalization
+This generates:
 
-long sequences may require truncation
+```text
+logs/evaluation_summary.csv
+logs/llm_comparison_summary.csv
+logs/best_cases.csv
+logs/worst_cases.csv
+```
 
-contextual embeddings are not yet used
+These files are used in the technical report.
 
-Future improvements in MS2 and MS3 may include:
+---
 
-subword tokenization
+## 14. Evaluation Metrics
 
-transformer-based tokenizers
+### Semantic Similarity
 
-contextual embeddings
+This metric compares the meaning of the generated answer with the gold answer.
 
-dialect-aware normalization
+In this project, it is implemented using character-level TF-IDF similarity.
 
-improved sequence modeling architectures
+---
 
-Conclusion
+### ROUGE-L
 
-This project establishes a complete preprocessing and analysis pipeline for the ElDa7ee7 Season 8 dataset.
+ROUGE-L measures the longest common subsequence between the generated answer and reference answer.
 
-Through dataset exploration, normalization, and vocabulary construction, the corpus is transformed from raw transcripts into structured, model-ready text representations.
+It is useful for checking text overlap.
 
-These steps provide the necessary foundation for future NLP modeling and experimentation.
+---
 
+### Groundedness
+
+Groundedness checks whether the generated answer is supported by the retrieved transcript chunks.
+
+A higher groundedness score means the generated answer is more connected to the retrieved context.
+
+---
+
+## 15. How the RAG Pipeline Works
+
+The complete pipeline is:
+
+```text
+User question
+↓
+Rewrite follow-up question if needed
+↓
+Embed question
+↓
+Search FAISS vector store
+↓
+Retrieve top-k chunks
+↓
+Detect out-of-domain questions
+↓
+Build strict grounded prompt
+↓
+Call Groq LLM
+↓
+Return answer
+↓
+Display retrieved sources and logs
+```
+
+---
+
+## 16. Out-of-Domain Example
+
+Question:
+
+```text
+ما هو سعر الدولار اليوم؟
+```
+
+Expected output:
+
+```text
+لا توجد معلومات كافية في الحلقات المختارة للإجابة على هذا السؤال.
+```
+
+The system marks:
+
+```text
+Out of Domain: True
+```
+
+---
+
+## 17. Multi-Turn Example
+
+Question 1:
+
+```text
+من هو جون كينيدي؟
+```
+
+Question 2:
+
+```text
+وماذا حدث له؟
+```
+
+The second question is rewritten internally to include the active entity:
+
+```text
+جون كينيدي
+```
+
+This helps the retriever search the correct transcript chunks.
+
+---
+## 21. Main Commands
+
+Build vector store:
+
+```bash
+python build_vectorstore.py
+```
+
+Run chatbot:
+
+```bash
+python rag_pipeline.py
+```
+
+Run Streamlit:
+
+```bash
+streamlit run app.py
+```
+
+Run evaluation:
+
+```bash
+python evaluate.py
+```
+
+Compare LLMs:
+
+```bash
+python compare_llms.py
+```
+
+Summarize results:
+
+```bash
+python summarize_results.py
+```

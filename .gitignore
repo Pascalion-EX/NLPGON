@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+
+# Secrets
+.env
+
+# Cache
+.cache/
+.tmp/
+.pip-cache/
+*.pkl
+
+# Large vectorstore files
+vectorstore/faiss_index/*.faiss
+vectorstore/faiss_index/*.pkl
+
+# OS
+.DS_Store
